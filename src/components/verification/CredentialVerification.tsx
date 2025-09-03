@@ -40,6 +40,14 @@ const CredentialVerification = ({
     import.meta.env.VITE_PRIVATE_KEY || ""
   );
 
+  const [kid, setKid] = useState(
+    import.meta.env.VITE_KID || ""
+  );
+
+  const [jwtAlgorithm, setJwtAlgorithm] = useState<"ES256" | "RS256">(
+    (import.meta.env.VITE_JWT_ALGORITHM as "ES256" | "RS256") || "ES256"
+  );
+
   console.log("AirService in CredentialVerification:", airService);
 
   const handleConfigChange = (field: string, value: string) => {
@@ -57,6 +65,8 @@ const CredentialVerification = ({
         (await generateJwt({
           partnerId,
           privateKey,
+          kid,
+          jwtAlgorithm,
         }));
 
       if (!jwt) {
@@ -89,7 +99,7 @@ const CredentialVerification = ({
   const handleGenerateJwt = async () => {
     setError(null);
     try {
-      const jwt = await generateJwt({ partnerId, privateKey });
+      const jwt = await generateJwt({ partnerId, privateKey, kid, jwtAlgorithm });
       if (!jwt) {
         setError("Failed to generate JWT");
         setGeneratedJwt("");
@@ -214,6 +224,35 @@ const CredentialVerification = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500 resize-vertical"
                   rows={4}
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  KID (Key ID)
+                </label>
+                <input
+                  type="text"
+                  value={kid}
+                  onChange={(e) => setKid(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  placeholder="Enter your KID"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  JWT Algorithm
+                </label>
+                <select
+                  value={jwtAlgorithm}
+                  onChange={(e) => setJwtAlgorithm(e.target.value as "ES256" | "RS256")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="ES256">ES256</option>
+                  <option value="RS256">RS256</option>
+                </select>
               </div>
             </div>
 

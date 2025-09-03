@@ -12,19 +12,23 @@ export interface JwtPayload {
 const signJwt = async ({
   payload,
   privateKeyPem,
+  kid,
+  jwtAlgorithm = "RS256",
 }: {
   payload: JwtPayload;
   privateKeyPem: string;
+  kid?: string;
+  jwtAlgorithm?: "ES256" | "RS256";
 }): Promise<string> => {
   const formattedKey = privateKeyPem.replace(/\\n/g, "\n");
-  const privateKey = await jose.importPKCS8(formattedKey, "RS256", {
+  const privateKey = await jose.importPKCS8(formattedKey, jwtAlgorithm, {
     extractable: true,
   });
 
   const jwt = await new jose.SignJWT(payload)
     .setProtectedHeader({
-      alg: "RS256",
-      kid: "6386cb4d-c0de-4629-a412-8dcf6f50f805",
+      alg: jwtAlgorithm,
+      kid: kid || "6386cb4d-c0de-4629-a412-8dcf6f50f805",
     })
     .setExpirationTime("1h")
     .sign(privateKey);
@@ -35,14 +39,20 @@ const signJwt = async ({
 export const generateJwt = async ({
   partnerId,
   privateKey,
+  kid,
+  jwtAlgorithm = "RS256",
 }: {
   partnerId: string;
   privateKey: string;
+  kid?: string;
+  jwtAlgorithm?: "ES256" | "RS256";
 }): Promise<string | null> => {
   try {
     const jwt = await signJwt({
       payload: getJwtPayload(partnerId),
       privateKeyPem: privateKey,
+      kid,
+      jwtAlgorithm,
     });
     return jwt;
   } catch (error) {
