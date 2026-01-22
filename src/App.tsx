@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import "./App.css";
 import CredentialIssuance from "./components/issuance/CredentialIssuance";
@@ -10,12 +10,30 @@ import { getEnvironmentConfig, type EnvironmentConfig } from "./config/environme
 // Get partner IDs from environment variables
 const ISSUER_PARTNER_ID = import.meta.env.VITE_ISSUER_PARTNER_ID || "66811bd6-dab9-41ef-8146-61f29d038a45";
 const VERIFIER_PARTNER_ID = import.meta.env.VITE_VERIFIER_PARTNER_ID || "66811bd6-dab9-41ef-8146-61f29d038a45";
-const enableLogging = true;
+
+const defaultAirkitOptions: Parameters<
+  typeof AirService.prototype.init
+>[0] = {
+  buildEnv: BUILD_ENV.STAGING,
+  enableLogging: true,
+  skipRehydration: false,
+  preloadCredential: true,
+};
 
 const ENV_OPTIONS = [
   { label: "Staging", value: BUILD_ENV.STAGING },
   { label: "Sandbox", value: BUILD_ENV.SANDBOX },
 ];
+
+// Create singleton outside of component to avoid ref issues
+let airServiceInstance: AirService | null = null;
+
+const getAirService = (partnerId: string) => {
+  airServiceInstance ??=  new AirService({
+    partnerId
+  });
+  return airServiceInstance;
+};
 
 // Component to get current flow title
 const FlowTitle = () => {
@@ -187,16 +205,16 @@ function AppRoutes({
 }
 
 function App() {
-  const [airService, setAirService] = useState<AirService | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const initAttempted = useRef(false);
   const [userAddress, setUserAddress] = useState<string | null>(null);
   const [currentEnv, setCurrentEnv] = useState<BUILD_ENV_TYPE>(
-    BUILD_ENV.SANDBOX
+    BUILD_ENV.STAGING
   );
   const [partnerId, setPartnerId] = useState<string>(ISSUER_PARTNER_ID);
-
+  const airService = getAirService(partnerId);
   // Get environment config based on current environment
   const environmentConfig = getEnvironmentConfig(currentEnv);
 
@@ -208,14 +226,15 @@ function App() {
     }
 
     try {
-      const service = new AirService({ partnerId: partnerIdToUse });
-      await service.init({ buildEnv: env as (typeof BUILD_ENV)[keyof typeof BUILD_ENV], enableLogging, skipRehydration: false });
-      setAirService(service);
+      await airService.init({ 
+        ...defaultAirkitOptions,
+        buildEnv: env as (typeof BUILD_ENV)[keyof typeof BUILD_ENV] 
+      });
       setIsInitialized(true);
-      setIsLoggedIn(service.isLoggedIn);
+      setIsLoggedIn(airService.isLoggedIn);
 
-      if (service.isLoggedIn && service.loginResult) {
-        const result = service.loginResult;
+      if (airService.isLoggedIn && airService.loginResult) {
+        const result = airService.loginResult;
         console.log("result @ initializeAirService", result);
         if (result.abstractAccountAddress) {
           setUserAddress(result.abstractAccountAddress || null);
@@ -242,30 +261,26 @@ function App() {
           setUserAddress(null);
         }
       };
-      service.on(eventListener);
+      airService.on(eventListener);
     } catch (err) {
       console.error("Failed to initialize AIRKit service in nav bar:", err);
       setIsInitialized(true); // Set to true to prevent infinite loading on error
     }
   };
 
-  // Re-initialize AIRKit when partner ID or environment changes
   useEffect(() => {
-    initializeAirService(currentEnv, partnerId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentEnv, partnerId]);
-
-  useEffect(() => {
-    // Only run on mount for initial load
-    // (the above effect will handle env and partner ID changes)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (initAttempted.current) {
+      return;
+    }
+    initAttempted.current = true;
     initializeAirService(currentEnv, partnerId);
     return () => {
       if (airService) {
         airService.cleanUp();
       }
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEnv, partnerId]);
 
   const handleLogin = async () => {
     if (!airService) return;
